@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { applyProgression } from './progression'
 
 export async function completeDailyQuiz() {
   const {
@@ -11,38 +12,65 @@ export async function completeDailyQuiz() {
 
   const userId = session.user.id
 
-  // 1. traer profile
   const { data: profile, error } = await supabase
     .from('profiles')
-    .select('last_quiz_date, xp, coins, xp_max')
+    .select('*')
     .eq('id', userId)
     .single()
 
   if (error) throw error
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = new Date()
+  const todayStr = today.toISOString().split('T')[0]
 
-  // 2. si ya lo hizo hoy → no reward
-  if (profile.last_quiz_date === today) {
-    return {
-      alreadyCompleted: true,
-    }
+  if (profile.last_quiz_date === todayStr) {
+    return { alreadyCompleted: true }
   }
 
-  // 3. calcular recompensas
   const XP_REWARD = 25
   const COINS_REWARD = 10
 
-  const newXp = Math.min(profile.xp + XP_REWARD, profile.xp_max)
-  const newCoins = profile.coins + COINS_REWARD
+  const progression = applyProgression(
+    {
+      level: profile.level ?? 1,
+      xp: profile.xp,
+      xpMax: profile.xp_max,
+      coins: profile.coins,
+    },
+    XP_REWARD,
+    COINS_REWARD
+  )
 
-  // 4. actualizar profile
+  let newStreak = 1
+
+  if (profile.last_streak_date) {
+    const last = new Date(profile.last_streak_date)
+    const yesterday = new Date()
+    yesterday.setDate(today.getDate() - 1)
+
+    const lastStr = last.toISOString().split('T')[0]
+    const yesterdayStr = yesterday.toISOString().split('T')[0]
+
+    if (lastStr === yesterdayStr) {
+      newStreak = profile.streak + 1
+    } else if (lastStr === todayStr) {
+      newStreak = profile.streak
+    } else {
+      newStreak = 1
+    }
+  }
+
   const { error: updateError } = await supabase
     .from('profiles')
     .update({
-      xp: newXp,
-      coins: newCoins,
-      last_quiz_date: today,
+      level: progression.level,
+      level_label: `Nivel ${progression.level}`,
+      xp: progression.xp,
+      xp_max: progression.xpMax,
+      coins: progression.coins,
+      streak: newStreak,
+      last_quiz_date: todayStr,
+      last_streak_date: todayStr,
     })
     .eq('id', userId)
 
@@ -52,5 +80,9 @@ export async function completeDailyQuiz() {
     alreadyCompleted: false,
     xp: XP_REWARD,
     coins: COINS_REWARD,
+    streak: newStreak,
+    leveledUp: progression.leveledUp,
+    newLevel: progression.newLevel,
+    levelsGained: progression.levelsGained,
   }
 }

@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { getLevelLabel } from './progression'
 
 type MissionRelationRow = {
   id: number
@@ -111,11 +112,13 @@ export async function loadAppData(userId: string) {
 
   const user = {
     name: profile.display_name,
-    levelLabel: profile.level_label,
+    level: profile.level ?? 1,
+    levelLabel: getLevelLabel(profile.level ?? 1),
     xp: profile.xp,
     xpMax: profile.xp_max,
     coins: profile.coins,
     streak: profile.streak,
+    lastStreakDate: profile.last_streak_date,
     completedMissions: profile.completed_missions,
   }
 

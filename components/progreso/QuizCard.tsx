@@ -11,6 +11,7 @@ export default function QuizCard() {
   const [step, setStep] = useState<'intro' | 'question' | 'result'>('intro')
   const [selected, setSelected] = useState<number | null>(null)
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [alreadyCompletedToday, setAlreadyCompletedToday] = useState(false)
 
@@ -19,29 +20,28 @@ export default function QuizCard() {
 
   useEffect(() => {
     async function checkQuizStatus() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
 
-      if (!session?.user) return
+        if (!session?.user) return
 
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('last_quiz_date')
-        .eq('id', session.user.id)
-        .single()
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('last_quiz_date')
+          .eq('id', session.user.id)
+          .single()
 
-      if (error) {
-        console.error('Error checking quiz status:', error)
-        return
-      }
+        if (error) {
+          console.error('Error checking quiz status:', error)
+          return
+        }
 
-      const today = new Date().toISOString().split('T')[0]
-
-      if (data?.last_quiz_date === today) {
-        setAlreadyCompletedToday(true)
-      } else {
-        setAlreadyCompletedToday(false)
+        const today = new Date().toISOString().split('T')[0]
+        setAlreadyCompletedToday(data?.last_quiz_date === today)
+      } catch (error) {
+        console.error('Unexpected quiz status error:', error)
       }
     }
 
@@ -54,19 +54,27 @@ export default function QuizCard() {
     setStep('question')
     setSelected(null)
     setFeedbackMessage(null)
+    setErrorMessage(null)
   }
 
   function handleAnswer(index: number) {
     setSelected(index)
     setStep('result')
+    setErrorMessage(null)
   }
 
   async function handleFinish() {
+    if (isSubmitting) return
+
     try {
       setIsSubmitting(true)
       setFeedbackMessage(null)
+      setErrorMessage(null)
+
+      console.log('[Quiz] Completing daily quiz...')
 
       const result = await completeDailyQuiz()
+      console.log('[Quiz] completeDailyQuiz result:', result)
 
       if (result.alreadyCompleted) {
         setAlreadyCompletedToday(true)
@@ -77,21 +85,41 @@ export default function QuizCard() {
         return
       }
 
+      // Refrescamos primero para traer streak/xp/coins nuevos del quiz
+      await refreshAppData()
+      console.log('[Quiz] App data refreshed after quiz reward')
+
+      // Si existe la misión del quiz y aún no está hecha, la completamos
       const quizMission = missions.find((m) => m.id === QUIZ_MISSION_ID)
+      console.log('[Quiz] quizMission:', quizMission)
 
       if (quizMission && !quizMission.done) {
         await toggleMission(QUIZ_MISSION_ID)
-      } else {
-        await refreshAppData()
+        console.log('[Quiz] Quiz mission toggled')
       }
 
+      // Refrescamos otra vez para dejar todo consistente
+      await refreshAppData()
+      console.log('[Quiz] App data refreshed after mission sync')
+
       setAlreadyCompletedToday(true)
-      setFeedbackMessage(`+${result.xp} XP 🧠  +${result.coins} 🪙`)
+     let message = `+${result.xp} XP 🧠  +${result.coins} 🪙  ·  Racha: ${result.streak} 🔥`
+
+if (result.leveledUp) {
+  message = `🚀 Subiste a nivel ${result.newLevel}!\n\n` + message
+}
+
+setFeedbackMessage(message)
       setStep('intro')
       setSelected(null)
     } catch (error) {
-      console.error(error)
-      setFeedbackMessage('Hubo un error al completar el quiz.')
+      console.error('[Quiz] handleFinish error:', error)
+
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Hubo un error al completar el quiz.'
+      )
     } finally {
       setIsSubmitting(false)
     }
@@ -137,7 +165,7 @@ export default function QuizCard() {
             </div>
           )}
 
-          {feedbackMessage && !alreadyCompletedToday && (
+          {feedbackMessage && (
             <div
               style={{
                 marginTop: '12px',
@@ -149,6 +177,22 @@ export default function QuizCard() {
               }}
             >
               {feedbackMessage}
+            </div>
+          )}
+
+          {errorMessage && (
+            <div
+              style={{
+                marginTop: '12px',
+                padding: '12px',
+                borderRadius: '12px',
+                background: 'rgba(255, 80, 80, 0.15)',
+                border: '1px solid rgba(255, 80, 80, 0.4)',
+                fontSize: '14px',
+                color: '#ffd6d6',
+              }}
+            >
+              {errorMessage}
             </div>
           )}
 
@@ -223,6 +267,22 @@ export default function QuizCard() {
             Recompensa: +25 XP 🧠  +10 🪙
           </div>
 
+          {errorMessage && (
+            <div
+              style={{
+                marginTop: '12px',
+                padding: '12px',
+                borderRadius: '12px',
+                background: 'rgba(255, 80, 80, 0.15)',
+                border: '1px solid rgba(255, 80, 80, 0.4)',
+                fontSize: '14px',
+                color: '#ffd6d6',
+              }}
+            >
+              {errorMessage}
+            </div>
+          )}
+
           <button
             onClick={handleFinish}
             disabled={isSubmitting}
@@ -231,13 +291,13 @@ export default function QuizCard() {
               padding: '10px 14px',
               borderRadius: '10px',
               border: 'none',
-              background: '#6d49ff',
+              background: isSubmitting ? '#666' : '#6d49ff',
               color: '#fff',
-              cursor: 'pointer',
+              cursor: isSubmitting ? 'default' : 'pointer',
               fontWeight: 600,
             }}
           >
-            Finalizar
+            {isSubmitting ? 'Guardando...' : 'Finalizar'}
           </button>
         </>
       )}

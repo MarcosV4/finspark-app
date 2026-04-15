@@ -9,7 +9,7 @@ import LevelCard from '../../components/dashboard/LevelCard'
 import { useAppContext } from '../../components/providers/AppProvider'
 
 export default function DashboardPage() {
-  const { user } = useAppContext()
+  const { user, visibleStreak } = useAppContext()
 
   const data = {
     available: 700,
@@ -25,7 +25,7 @@ export default function DashboardPage() {
     <Screen>
       <DashboardHeader
         name={user.name}
-        streak={user.streak}
+        streak={visibleStreak}
         level={user.levelLabel}
       />
 

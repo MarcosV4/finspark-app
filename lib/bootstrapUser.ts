@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { getXpMax, getLevelLabel } from './progression'
 
 type MissionRow = {
   id: number
@@ -20,13 +21,16 @@ export async function bootstrapUser(userId: string, email?: string | null) {
   }
 
   if (!existingProfile) {
+    const initialLevel = 1
+
     const { error: insertProfileError } = await supabase.from('profiles').insert({
       id: userId,
       display_name: email?.split('@')[0] || 'Usuario',
       pet_name: 'Porkio',
-      level_label: 'Nivel 1 — Novato',
+      level: initialLevel,
+      level_label: getLevelLabel(initialLevel),
       xp: 0,
-      xp_max: 1000,
+      xp_max: getXpMax(initialLevel),
       coins: 0,
       streak: 0,
       completed_missions: 0,

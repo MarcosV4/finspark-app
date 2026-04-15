@@ -8,8 +8,14 @@ import ShopSection from '../../components/mascota/ShopSection'
 import { useAppContext } from '../../components/providers/AppProvider'
 
 export default function MascotaPage() {
-  const { user, shopItems, equippedItems, buyItem, equipItem } =
-    useAppContext()
+  const {
+    user,
+    visibleStreak,
+    shopItems,
+    equippedItems,
+    buyItem,
+    equipItem,
+  } = useAppContext()
 
   const items = [
     { id: 1, name: 'Sombrero mago', price: 200 },
@@ -38,7 +44,7 @@ export default function MascotaPage() {
       />
 
       <ProgressStats
-        streak={user.streak}
+        streak={visibleStreak}
         missions={user.completedMissions}
       />
 
