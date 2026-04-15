@@ -1,6 +1,7 @@
 import './globals.css'
-import BottomNav from '../components/BottomNav'
 import { AppProvider } from '../components/providers/AppProvider'
+import AuthGuard from '../components/AuthGuard'
+import AppShell from '../components/AppShell'
 
 export default function RootLayout({
   children,
@@ -10,15 +11,11 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body>
-        <AppProvider>
-          <div className="app-container">
-            <div style={{ flex: 1, overflow: 'auto' }}>
-              {children}
-            </div>
-
-            <BottomNav />
-          </div>
-        </AppProvider>
+        <AuthGuard>
+          <AppProvider>
+            <AppShell>{children}</AppShell>
+          </AppProvider>
+        </AuthGuard>
       </body>
     </html>
   )
