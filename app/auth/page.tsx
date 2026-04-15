@@ -1,10 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
 import { bootstrapUser } from '../../lib/bootstrapUser'
 
 export default function AuthPage() {
+  const router = useRouter()
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [message, setMessage] = useState<string | null>(null)
@@ -18,6 +21,10 @@ export default function AuthPage() {
       } = await supabase.auth.getSession()
 
       setUserEmail(session?.user?.email ?? null)
+
+      if (session?.user) {
+        router.push('/dashboard')
+      }
     }
 
     loadSession()
@@ -30,6 +37,7 @@ export default function AuthPage() {
       if (session?.user) {
         try {
           await bootstrapUser(session.user.id, session.user.email)
+          router.push('/dashboard')
         } catch (error) {
           console.error(error)
         }
@@ -39,7 +47,7 @@ export default function AuthPage() {
     return () => {
       subscription.unsubscribe()
     }
-  }, [])
+  }, [router])
 
   async function handleSignUp() {
     setLoading(true)
@@ -48,12 +56,15 @@ export default function AuthPage() {
     const { error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth`,
+      },
     })
 
     if (error) {
       setMessage(error.message)
     } else {
-      setMessage('Registro correcto. Revisa tu email si Supabase pide confirmación.')
+      setMessage('Registro correcto. Revisa tu email para confirmar la cuenta.')
     }
 
     setLoading(false)
@@ -70,22 +81,24 @@ export default function AuthPage() {
 
     if (error) {
       setMessage(error.message)
-    } else {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
+      setLoading(false)
+      return
+    }
 
-      if (session?.user) {
-        try {
-          await bootstrapUser(session.user.id, session.user.email)
-          setMessage('Sesión iniciada y usuario inicializado correctamente.')
-        } catch (bootstrapError) {
-          const err = bootstrapError as Error
-          setMessage(`Login correcto, pero falló bootstrap: ${err.message}`)
-        }
-      } else {
-        setMessage('Sesión iniciada correctamente.')
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (session?.user) {
+      try {
+        await bootstrapUser(session.user.id, session.user.email)
+        router.push('/dashboard')
+      } catch (bootstrapError) {
+        const err = bootstrapError as Error
+        setMessage(`Login correcto, pero falló bootstrap: ${err.message}`)
       }
+    } else {
+      setMessage('Sesión iniciada correctamente.')
     }
 
     setLoading(false)

@@ -79,7 +79,13 @@ export function AppProvider({
       data: { session },
     } = await supabase.auth.getSession()
 
-    if (!session?.user) return
+    if (!session?.user) {
+      setUser(emptyUser)
+      setMissions([])
+      setShopItems([])
+      setEquippedItems({})
+      return
+    }
 
     try {
       const data = await loadAppData(session.user.id)
@@ -94,23 +100,22 @@ export function AppProvider({
 
   useEffect(() => {
     async function init() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      if (!session?.user) {
-        setIsHydrated(true)
-        return
-      }
-
-      try {
-        await refreshAppData()
-      } finally {
-        setIsHydrated(true)
-      }
+      await refreshAppData()
+      setIsHydrated(true)
     }
 
     init()
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async () => {
+      await refreshAppData()
+      setIsHydrated(true)
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
   }, [])
 
   async function updateProfileInDb(nextUser: User) {
@@ -199,7 +204,6 @@ export function AppProvider({
       await updateProfileInDb(nextUser)
     } catch (error) {
       console.error(error)
-      alert(error instanceof Error ? error.message : 'Error updating profile')
     }
   }
 
@@ -241,7 +245,6 @@ export function AppProvider({
       await updateProfileInDb(nextUser)
     } catch (error) {
       console.error(error)
-      alert(error instanceof Error ? error.message : 'Error updating profile')
     }
   }
 
