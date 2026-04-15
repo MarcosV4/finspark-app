@@ -1,6 +1,8 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState } from 'react'
+import { supabase } from '../../lib/supabase'
+import { loadAppData } from '../../lib/loadAppData'
 
 type Mission = {
   id: number
@@ -31,205 +33,265 @@ type EquippedItems = {
   outfit?: number
 }
 
+type EquippedItemsUpdate = {
+  hat_item_id?: number | null
+  glasses_item_id?: number | null
+  outfit_item_id?: number | null
+}
+
 type AppState = {
   user: User
   missions: Mission[]
   shopItems: ShopItem[]
   equippedItems: EquippedItems
-  toggleMission: (id: number) => void
-  rewardUser: (xp: number, coins: number) => void
-  buyItem: (id: number, price: number) => void
-  equipItem: (id: number) => void
+  toggleMission: (id: number) => Promise<void>
+  rewardUser: (xp: number, coins: number) => Promise<void>
+  buyItem: (id: number, price: number) => Promise<void>
+  equipItem: (id: number) => Promise<void>
+  refreshAppData: () => Promise<void>
 }
 
 const AppContext = createContext<AppState | undefined>(undefined)
 
-const STORAGE_KEY = 'finspark-app-state'
-
-const defaultUser: User = {
-  name: 'Lucía',
-  levelLabel: 'Nivel 3 — Ahorrista',
-  xp: 680,
+const emptyUser: User = {
+  name: '',
+  levelLabel: '',
+  xp: 0,
   xpMax: 1000,
-  coins: 245,
-  streak: 7,
-  completedMissions: 12,
+  coins: 0,
+  streak: 0,
+  completedMissions: 0,
 }
-
-const defaultMissions: Mission[] = [
-  {
-    id: 1,
-    title: 'Transferir 50€ al colchón',
-    done: false,
-    xpReward: 40,
-    coinReward: 20,
-  },
-  {
-    id: 2,
-    title: 'Revisar gastos de la semana',
-    done: true,
-    xpReward: 30,
-    coinReward: 15,
-  },
-  {
-    id: 3,
-    title: 'Completar el quiz del día',
-    done: false,
-    xpReward: 50,
-    coinReward: 25,
-  },
-]
-
-const defaultShopItems: ShopItem[] = [
-  { id: 1, owned: true },
-  { id: 2, owned: true },
-  { id: 3, owned: false },
-  { id: 4, owned: false },
-  { id: 5, owned: false },
-  { id: 6, owned: false },
-  { id: 7, owned: false },
-  { id: 8, owned: false },
-  { id: 9, owned: false },
-]
-
-const defaultEquippedItems: EquippedItems = {}
 
 export function AppProvider({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const [user, setUser] = useState<User>(defaultUser)
-  const [missions, setMissions] = useState<Mission[]>(defaultMissions)
-  const [shopItems, setShopItems] = useState<ShopItem[]>(defaultShopItems)
-  const [equippedItems, setEquippedItems] =
-    useState<EquippedItems>(defaultEquippedItems)
+  const [user, setUser] = useState<User>(emptyUser)
+  const [missions, setMissions] = useState<Mission[]>([])
+  const [shopItems, setShopItems] = useState<ShopItem[]>([])
+  const [equippedItems, setEquippedItems] = useState<EquippedItems>({})
   const [isHydrated, setIsHydrated] = useState(false)
 
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY)
+  async function refreshAppData() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
 
-      if (saved) {
-        const parsed = JSON.parse(saved) as {
-          user?: User
-          missions?: Mission[]
-          shopItems?: ShopItem[]
-          equippedItems?: EquippedItems
-        }
-
-        if (parsed.user) setUser(parsed.user)
-        if (parsed.missions) setMissions(parsed.missions)
-        if (parsed.shopItems) setShopItems(parsed.shopItems)
-        if (parsed.equippedItems) setEquippedItems(parsed.equippedItems)
-      }
-    } catch (error) {
-      console.error('Error loading app state from localStorage:', error)
-    } finally {
-      setIsHydrated(true)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!isHydrated) return
+    if (!session?.user) return
 
     try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          user,
-          missions,
-          shopItems,
-          equippedItems,
-        })
-      )
+      const data = await loadAppData(session.user.id)
+      setUser(data.user)
+      setMissions(data.missions)
+      setShopItems(data.shopItems)
+      setEquippedItems(data.equippedItems)
     } catch (error) {
-      console.error('Error saving app state to localStorage:', error)
+      console.error('Error refreshing app data:', error)
     }
-  }, [user, missions, shopItems, equippedItems, isHydrated])
-
-  function rewardUser(xp: number, coins: number) {
-    setUser((prev) => ({
-      ...prev,
-      xp: Math.min(prev.xp + xp, prev.xpMax),
-      coins: prev.coins + coins,
-    }))
   }
 
-  function toggleMission(id: number) {
+  useEffect(() => {
+    async function init() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session?.user) {
+        setIsHydrated(true)
+        return
+      }
+
+      try {
+        await refreshAppData()
+      } finally {
+        setIsHydrated(true)
+      }
+    }
+
+    init()
+  }, [])
+
+  async function updateProfileInDb(nextUser: User) {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session?.user) {
+      throw new Error('No authenticated user found while updating profile')
+    }
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        display_name: nextUser.name,
+        level_label: nextUser.levelLabel,
+        xp: nextUser.xp,
+        xp_max: nextUser.xpMax,
+        coins: nextUser.coins,
+        streak: nextUser.streak,
+        completed_missions: nextUser.completedMissions,
+      })
+      .eq('id', session.user.id)
+
+    if (error) {
+      throw new Error(`Error updating profile: ${error.message}`)
+    }
+  }
+
+  async function rewardUser(xp: number, coins: number) {
+    const nextUser = {
+      ...user,
+      xp: Math.min(user.xp + xp, user.xpMax),
+      coins: user.coins + coins,
+    }
+
+    setUser(nextUser)
+    await updateProfileInDb(nextUser)
+  }
+
+  async function toggleMission(id: number) {
     const mission = missions.find((m) => m.id === id)
     if (!mission) return
 
-    setMissions((prev) =>
-      prev.map((m) =>
-        m.id === id
-          ? {
-              ...m,
-              done: !m.done,
-            }
-          : m
-      )
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session?.user) return
+
+    const newDone = !mission.done
+
+    const { error: missionError } = await supabase
+      .from('user_missions')
+      .update({ done: newDone })
+      .eq('user_id', session.user.id)
+      .eq('mission_id', id)
+
+    if (missionError) {
+      console.error('Error updating mission:', missionError)
+      return
+    }
+
+    const nextMissions = missions.map((m) =>
+      m.id === id ? { ...m, done: newDone } : m
     )
 
-    setUser((prev) => {
-      if (mission.done) {
-        return {
-          ...prev,
-          xp: Math.max(prev.xp - mission.xpReward, 0),
-          coins: Math.max(prev.coins - mission.coinReward, 0),
-          completedMissions: Math.max(prev.completedMissions - 1, 0),
+    const nextUser = newDone
+      ? {
+          ...user,
+          xp: Math.min(user.xp + mission.xpReward, user.xpMax),
+          coins: user.coins + mission.coinReward,
+          completedMissions: user.completedMissions + 1,
         }
-      }
+      : {
+          ...user,
+          xp: Math.max(user.xp - mission.xpReward, 0),
+          coins: Math.max(user.coins - mission.coinReward, 0),
+          completedMissions: Math.max(user.completedMissions - 1, 0),
+        }
 
-      return {
-        ...prev,
-        xp: Math.min(prev.xp + mission.xpReward, prev.xpMax),
-        coins: prev.coins + mission.coinReward,
-        completedMissions: prev.completedMissions + 1,
-      }
-    })
+    setMissions(nextMissions)
+    setUser(nextUser)
+
+    try {
+      await updateProfileInDb(nextUser)
+    } catch (error) {
+      console.error(error)
+      alert(error instanceof Error ? error.message : 'Error updating profile')
+    }
   }
 
-  function buyItem(id: number, price: number) {
+  async function buyItem(id: number, price: number) {
     const item = shopItems.find((i) => i.id === id)
     if (!item || item.owned) return
     if (user.coins < price) return
 
-    setUser((prev) => ({
-      ...prev,
-      coins: prev.coins - price,
-    }))
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
 
-    setShopItems((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, owned: true } : i))
+    if (!session?.user) return
+
+    const { error: shopError } = await supabase
+      .from('user_shop_items')
+      .update({ owned: true })
+      .eq('user_id', session.user.id)
+      .eq('shop_item_id', id)
+
+    if (shopError) {
+      console.error('Error buying item:', shopError)
+      return
+    }
+
+    const nextShopItems = shopItems.map((i) =>
+      i.id === id ? { ...i, owned: true } : i
     )
+
+    const nextUser = {
+      ...user,
+      coins: user.coins - price,
+    }
+
+    setShopItems(nextShopItems)
+    setUser(nextUser)
+
+    try {
+      await updateProfileInDb(nextUser)
+    } catch (error) {
+      console.error(error)
+      alert(error instanceof Error ? error.message : 'Error updating profile')
+    }
   }
 
-  function equipItem(id: number) {
-  const item = shopItems.find((i) => i.id === id)
-  if (!item || !item.owned) return
+  async function equipItem(id: number) {
+    const item = shopItems.find((i) => i.id === id)
+    if (!item || !item.owned) return
 
-  if (id === 1) {
-    setEquippedItems((prev) => ({
-      ...prev,
-      hat: prev.hat === id ? undefined : id,
-    }))
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session?.user) return
+
+    const nextEquippedItems: EquippedItems = { ...equippedItems }
+    const updatePayload: EquippedItemsUpdate = {}
+
+    if (id === 1) {
+      const nextHat = equippedItems.hat === id ? undefined : id
+      nextEquippedItems.hat = nextHat
+      updatePayload.hat_item_id = nextHat ?? null
+    }
+
+    if (id === 2) {
+      const nextGlasses = equippedItems.glasses === id ? undefined : id
+      nextEquippedItems.glasses = nextGlasses
+      updatePayload.glasses_item_id = nextGlasses ?? null
+    }
+
+    if (id === 3) {
+      const nextOutfit = equippedItems.outfit === id ? undefined : id
+      nextEquippedItems.outfit = nextOutfit
+      updatePayload.outfit_item_id = nextOutfit ?? null
+    }
+
+    const { error: equipError } = await supabase
+      .from('user_equipped_items')
+      .update(updatePayload)
+      .eq('user_id', session.user.id)
+
+    if (equipError) {
+      console.error('Error equipping item:', equipError)
+      return
+    }
+
+    setEquippedItems(nextEquippedItems)
   }
 
-  if (id === 2) {
-    setEquippedItems((prev) => ({
-      ...prev,
-      glasses: prev.glasses === id ? undefined : id,
-    }))
+  if (!isHydrated) {
+    return null
   }
-
-  if (id === 3) {
-    setEquippedItems((prev) => ({
-      ...prev,
-      outfit: prev.outfit === id ? undefined : id,
-    }))
-  }
-}
 
   return (
     <AppContext.Provider
@@ -242,6 +304,7 @@ export function AppProvider({
         rewardUser,
         buyItem,
         equipItem,
+        refreshAppData,
       }}
     >
       {children}

@@ -1,36 +1,100 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { completeDailyQuiz } from '../../lib/quiz'
+import { supabase } from '../../lib/supabase'
 import { useAppContext } from '../providers/AppProvider'
 
 export default function QuizCard() {
-  const { rewardUser } = useAppContext()
+  const { missions, toggleMission, refreshAppData } = useAppContext()
 
   const [step, setStep] = useState<'intro' | 'question' | 'result'>('intro')
   const [selected, setSelected] = useState<number | null>(null)
-  const [rewarded, setRewarded] = useState(false)
+  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [alreadyCompletedToday, setAlreadyCompletedToday] = useState(false)
 
   const correctAnswer = 1
-  const xpReward = 25
-  const coinReward = 10
+  const QUIZ_MISSION_ID = 3
+
+  useEffect(() => {
+    async function checkQuizStatus() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session?.user) return
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('last_quiz_date')
+        .eq('id', session.user.id)
+        .single()
+
+      if (error) {
+        console.error('Error checking quiz status:', error)
+        return
+      }
+
+      const today = new Date().toISOString().split('T')[0]
+
+      if (data?.last_quiz_date === today) {
+        setAlreadyCompletedToday(true)
+      } else {
+        setAlreadyCompletedToday(false)
+      }
+    }
+
+    checkQuizStatus()
+  }, [])
+
+  function handleStart() {
+    if (alreadyCompletedToday) return
+
+    setStep('question')
+    setSelected(null)
+    setFeedbackMessage(null)
+  }
 
   function handleAnswer(index: number) {
     setSelected(index)
     setStep('result')
   }
 
-  function handleStart() {
-    setStep('question')
-  }
+  async function handleFinish() {
+    try {
+      setIsSubmitting(true)
+      setFeedbackMessage(null)
 
-  function handleFinish() {
-    if (!rewarded) {
-      rewardUser(xpReward, coinReward)
-      setRewarded(true)
+      const result = await completeDailyQuiz()
+
+      if (result.alreadyCompleted) {
+        setAlreadyCompletedToday(true)
+        setFeedbackMessage('Ya completaste el quiz de hoy ✅')
+        setStep('intro')
+        setSelected(null)
+        await refreshAppData()
+        return
+      }
+
+      const quizMission = missions.find((m) => m.id === QUIZ_MISSION_ID)
+
+      if (quizMission && !quizMission.done) {
+        await toggleMission(QUIZ_MISSION_ID)
+      } else {
+        await refreshAppData()
+      }
+
+      setAlreadyCompletedToday(true)
+      setFeedbackMessage(`+${result.xp} XP 🧠  +${result.coins} 🪙`)
+      setStep('intro')
+      setSelected(null)
+    } catch (error) {
+      console.error(error)
+      setFeedbackMessage('Hubo un error al completar el quiz.')
+    } finally {
+      setIsSubmitting(false)
     }
-
-    setStep('intro')
-    setSelected(null)
   }
 
   const isCorrect = selected === correctAnswer
@@ -58,20 +122,51 @@ export default function QuizCard() {
             Aprende por qué es clave antes de invertir.
           </p>
 
+          {alreadyCompletedToday && (
+            <div
+              style={{
+                marginTop: '12px',
+                padding: '12px',
+                borderRadius: '12px',
+                background: 'rgba(0, 200, 120, 0.15)',
+                border: '1px solid rgba(0, 200, 120, 0.4)',
+                fontSize: '14px',
+              }}
+            >
+              Ya completaste el quiz de hoy ✅
+            </div>
+          )}
+
+          {feedbackMessage && !alreadyCompletedToday && (
+            <div
+              style={{
+                marginTop: '12px',
+                padding: '12px',
+                borderRadius: '12px',
+                background: 'rgba(109, 73, 255, 0.18)',
+                border: '1px solid rgba(109, 73, 255, 0.35)',
+                fontSize: '14px',
+              }}
+            >
+              {feedbackMessage}
+            </div>
+          )}
+
           <button
             onClick={handleStart}
+            disabled={alreadyCompletedToday || isSubmitting}
             style={{
               marginTop: '12px',
               padding: '10px 14px',
               borderRadius: '10px',
               border: 'none',
-              background: '#6d49ff',
+              background: alreadyCompletedToday ? '#666' : '#6d49ff',
               color: '#fff',
               fontWeight: 600,
-              cursor: 'pointer',
+              cursor: alreadyCompletedToday ? 'default' : 'pointer',
             }}
           >
-            Empezar
+            {alreadyCompletedToday ? 'Completado hoy' : 'Empezar'}
           </button>
         </>
       )}
@@ -125,11 +220,12 @@ export default function QuizCard() {
               fontSize: '14px',
             }}
           >
-            Recompensa: +{xpReward} XP 🧠  +{coinReward} 🪙
+            Recompensa: +25 XP 🧠  +10 🪙
           </div>
 
           <button
             onClick={handleFinish}
+            disabled={isSubmitting}
             style={{
               marginTop: '12px',
               padding: '10px 14px',
