@@ -27,6 +27,7 @@ export async function loadAppData(userId: string) {
     userMissionsResult,
     userShopItemsResult,
     equippedItemsResult,
+    financialProfileResult,
   ] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', userId).single(),
     supabase
@@ -62,6 +63,11 @@ export async function loadAppData(userId: string) {
       .select('*')
       .eq('user_id', userId)
       .single(),
+    supabase
+      .from('financial_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle(),
   ])
 
   if (profileResult.error) {
@@ -80,15 +86,17 @@ export async function loadAppData(userId: string) {
     throw new Error(`Equipped items load error: ${equippedItemsResult.error.message}`)
   }
 
+  if (financialProfileResult.error) {
+    throw new Error(`Financial profile load error: ${financialProfileResult.error.message}`)
+  }
+
   const profile = profileResult.data
 
   const userMissionRows = (userMissionsResult.data ?? []) as unknown as UserMissionRow[]
   const userShopItemRows = (userShopItemsResult.data ?? []) as UserShopItemRow[]
 
   const missions = userMissionRows.map((row) => {
-    const mission = Array.isArray(row.missions)
-      ? row.missions[0]
-      : row.missions
+    const mission = Array.isArray(row.missions) ? row.missions[0] : row.missions
 
     return {
       id: row.mission_id,
@@ -110,6 +118,22 @@ export async function loadAppData(userId: string) {
     outfit: equippedItemsResult.data?.outfit_item_id ?? undefined,
   }
 
+  const financialRow = financialProfileResult.data
+
+  const financialProfile = financialRow
+    ? {
+        age: financialRow.age,
+        monthlyIncome: Number(financialRow.monthly_income ?? 0),
+        monthlyExpenses: Number(financialRow.monthly_expenses ?? 0),
+        monthlySavings: Number(financialRow.monthly_savings ?? 0),
+        monthlyInvestment: Number(financialRow.monthly_investment ?? 0),
+        badDebtTotal: Number(financialRow.bad_debt_total ?? 0),
+        currentSavingsBalance: Number(financialRow.current_savings_balance ?? 0),
+        currentInvestedBalance: Number(financialRow.current_invested_balance ?? 0),
+        consistencyMonths: Number(financialRow.consistency_months ?? 0),
+      }
+    : null
+
   const user = {
     name: profile.display_name,
     level: profile.level ?? 1,
@@ -120,6 +144,15 @@ export async function loadAppData(userId: string) {
     streak: profile.streak,
     lastStreakDate: profile.last_streak_date,
     completedMissions: profile.completed_missions,
+    hasCompletedOnboarding: profile.has_completed_onboarding ?? false,
+    moneyScore: profile.money_score ?? 10,
+    moneyScoreReal: profile.money_score_real ?? 0,
+    leagueKey: profile.league_key ?? 'bronze-iv',
+    leagueName: profile.league_name ?? 'Bronce',
+    leagueDivision: profile.league_division ?? 'IV',
+    petKey: profile.pet_key ?? null,
+    petName: profile.pet_name ?? null,
+    petDescription: profile.pet_description ?? null,
   }
 
   return {
@@ -127,5 +160,6 @@ export async function loadAppData(userId: string) {
     missions,
     shopItems,
     equippedItems,
+    financialProfile,
   }
 }

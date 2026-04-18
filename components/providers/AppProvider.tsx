@@ -23,6 +23,15 @@ type User = {
   streak: number
   lastStreakDate: string | null
   completedMissions: number
+  hasCompletedOnboarding: boolean
+  moneyScore: number
+  moneyScoreReal: number
+  leagueKey: string
+  leagueName: string
+  leagueDivision: string
+  petKey: string | null
+  petName: string | null
+  petDescription: string | null
 }
 
 type ShopItem = {
@@ -42,12 +51,25 @@ type EquippedItemsUpdate = {
   outfit_item_id?: number | null
 }
 
+type FinancialProfile = {
+  age: number
+  monthlyIncome: number
+  monthlyExpenses: number
+  monthlySavings: number
+  monthlyInvestment: number
+  badDebtTotal: number
+  currentSavingsBalance: number
+  currentInvestedBalance: number
+  consistencyMonths: number
+} | null
+
 type AppState = {
   user: User
   visibleStreak: number
   missions: Mission[]
   shopItems: ShopItem[]
   equippedItems: EquippedItems
+  financialProfile: FinancialProfile
   toggleMission: (id: number) => Promise<void>
   rewardUser: (xp: number, coins: number) => Promise<{ leveledUp: boolean; newLevel: number }>
   buyItem: (id: number, price: number) => Promise<void>
@@ -67,6 +89,15 @@ const emptyUser: User = {
   streak: 0,
   lastStreakDate: null,
   completedMissions: 0,
+  hasCompletedOnboarding: false,
+  moneyScore: 10,
+  moneyScoreReal: 0,
+  leagueKey: 'bronze-iv',
+  leagueName: 'Bronce',
+  leagueDivision: 'IV',
+  petKey: null,
+  petName: null,
+  petDescription: null,
 }
 
 function getVisibleStreak(user: User) {
@@ -79,10 +110,7 @@ function getVisibleStreak(user: User) {
   yesterday.setDate(today.getDate() - 1)
   const yesterdayStr = yesterday.toISOString().split('T')[0]
 
-  if (
-    user.lastStreakDate === todayStr ||
-    user.lastStreakDate === yesterdayStr
-  ) {
+  if (user.lastStreakDate === todayStr || user.lastStreakDate === yesterdayStr) {
     return user.streak
   }
 
@@ -98,6 +126,7 @@ export function AppProvider({
   const [missions, setMissions] = useState<Mission[]>([])
   const [shopItems, setShopItems] = useState<ShopItem[]>([])
   const [equippedItems, setEquippedItems] = useState<EquippedItems>({})
+  const [financialProfile, setFinancialProfile] = useState<FinancialProfile>(null)
   const [isHydrated, setIsHydrated] = useState(false)
 
   async function getSessionUserId() {
@@ -116,6 +145,7 @@ export function AppProvider({
       setMissions([])
       setShopItems([])
       setEquippedItems({})
+      setFinancialProfile(null)
       return
     }
 
@@ -125,6 +155,7 @@ export function AppProvider({
       setMissions(data.missions)
       setShopItems(data.shopItems)
       setEquippedItems(data.equippedItems)
+      setFinancialProfile(data.financialProfile)
     } catch (error) {
       console.error('Error refreshing app data:', error)
     }
@@ -164,10 +195,7 @@ export function AppProvider({
     return data
   }
 
-  async function updateProfileInDbByUserId(
-    userId: string,
-    nextUser: User
-  ) {
+  async function updateProfileInDbByUserId(userId: string, nextUser: User) {
     const { error } = await supabase
       .from('profiles')
       .update({
@@ -180,6 +208,15 @@ export function AppProvider({
         streak: nextUser.streak,
         last_streak_date: nextUser.lastStreakDate,
         completed_missions: nextUser.completedMissions,
+        has_completed_onboarding: nextUser.hasCompletedOnboarding,
+        money_score: nextUser.moneyScore,
+        money_score_real: nextUser.moneyScoreReal,
+        league_key: nextUser.leagueKey,
+        league_name: nextUser.leagueName,
+        league_division: nextUser.leagueDivision,
+        pet_key: nextUser.petKey,
+        pet_name: nextUser.petName,
+        pet_description: nextUser.petDescription,
       })
       .eq('id', userId)
 
@@ -217,6 +254,15 @@ export function AppProvider({
       streak: profile.streak,
       lastStreakDate: profile.last_streak_date,
       completedMissions: profile.completed_missions,
+      hasCompletedOnboarding: profile.has_completed_onboarding ?? false,
+      moneyScore: profile.money_score ?? 10,
+      moneyScoreReal: profile.money_score_real ?? 0,
+      leagueKey: profile.league_key ?? 'bronze-iv',
+      leagueName: profile.league_name ?? 'Bronce',
+      leagueDivision: profile.league_division ?? 'IV',
+      petKey: profile.pet_key ?? null,
+      petName: profile.pet_name ?? null,
+      petDescription: profile.pet_description ?? null,
     }
 
     setUser(nextUser)
@@ -274,6 +320,15 @@ export function AppProvider({
         streak: profile.streak,
         lastStreakDate: profile.last_streak_date,
         completedMissions: profile.completed_missions + 1,
+        hasCompletedOnboarding: profile.has_completed_onboarding ?? false,
+        moneyScore: profile.money_score ?? 10,
+        moneyScoreReal: profile.money_score_real ?? 0,
+        leagueKey: profile.league_key ?? 'bronze-iv',
+        leagueName: profile.league_name ?? 'Bronce',
+        leagueDivision: profile.league_division ?? 'IV',
+        petKey: profile.pet_key ?? null,
+        petName: profile.pet_name ?? null,
+        petDescription: profile.pet_description ?? null,
       }
     } else {
       nextUser = {
@@ -286,6 +341,15 @@ export function AppProvider({
         streak: profile.streak,
         lastStreakDate: profile.last_streak_date,
         completedMissions: Math.max(profile.completed_missions - 1, 0),
+        hasCompletedOnboarding: profile.has_completed_onboarding ?? false,
+        moneyScore: profile.money_score ?? 10,
+        moneyScoreReal: profile.money_score_real ?? 0,
+        leagueKey: profile.league_key ?? 'bronze-iv',
+        leagueName: profile.league_name ?? 'Bronce',
+        leagueDivision: profile.league_division ?? 'IV',
+        petKey: profile.pet_key ?? null,
+        petName: profile.pet_name ?? null,
+        petDescription: profile.pet_description ?? null,
       }
     }
 
@@ -334,6 +398,15 @@ export function AppProvider({
       streak: profile.streak,
       lastStreakDate: profile.last_streak_date,
       completedMissions: profile.completed_missions,
+      hasCompletedOnboarding: profile.has_completed_onboarding ?? false,
+      moneyScore: profile.money_score ?? 10,
+      moneyScoreReal: profile.money_score_real ?? 0,
+      leagueKey: profile.league_key ?? 'bronze-iv',
+      leagueName: profile.league_name ?? 'Bronce',
+      leagueDivision: profile.league_division ?? 'IV',
+      petKey: profile.pet_key ?? null,
+      petName: profile.pet_name ?? null,
+      petDescription: profile.pet_description ?? null,
     }
 
     const nextShopItems = shopItems.map((i) =>
@@ -405,6 +478,7 @@ export function AppProvider({
         missions,
         shopItems,
         equippedItems,
+        financialProfile,
         toggleMission,
         rewardUser,
         buyItem,

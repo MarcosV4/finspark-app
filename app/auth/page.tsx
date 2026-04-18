@@ -14,6 +14,22 @@ export default function AuthPage() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
+  async function redirectAfterBootstrap(userId: string, userEmail?: string | null) {
+    await bootstrapUser(userId, userEmail)
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('has_completed_onboarding')
+      .eq('id', userId)
+      .single()
+
+    if (error) {
+      throw new Error(`Error checking onboarding status: ${error.message}`)
+    }
+
+    router.push(data.has_completed_onboarding ? '/dashboard' : '/onboarding')
+  }
+
   useEffect(() => {
     async function loadSession() {
       const {
@@ -23,7 +39,11 @@ export default function AuthPage() {
       setUserEmail(session?.user?.email ?? null)
 
       if (session?.user) {
-        router.push('/dashboard')
+        try {
+          await redirectAfterBootstrap(session.user.id, session.user.email)
+        } catch (error) {
+          console.error(error)
+        }
       }
     }
 
@@ -36,8 +56,7 @@ export default function AuthPage() {
 
       if (session?.user) {
         try {
-          await bootstrapUser(session.user.id, session.user.email)
-          router.push('/dashboard')
+          await redirectAfterBootstrap(session.user.id, session.user.email)
         } catch (error) {
           console.error(error)
         }
@@ -91,8 +110,7 @@ export default function AuthPage() {
 
     if (session?.user) {
       try {
-        await bootstrapUser(session.user.id, session.user.email)
-        router.push('/dashboard')
+        await redirectAfterBootstrap(session.user.id, session.user.email)
       } catch (bootstrapError) {
         const err = bootstrapError as Error
         setMessage(`Login correcto, pero falló bootstrap: ${err.message}`)

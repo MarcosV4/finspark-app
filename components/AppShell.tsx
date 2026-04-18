@@ -9,9 +9,9 @@ export default function AppShell({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
-  const isAuthPage = pathname === '/auth'
+  const hideNav = pathname === '/auth' || pathname === '/onboarding'
 
-  if (isAuthPage) {
+  if (hideNav) {
     return <>{children}</>
   }
 
