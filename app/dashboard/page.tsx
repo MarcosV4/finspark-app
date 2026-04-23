@@ -1,6 +1,5 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
 import { useAppContext } from '../../components/providers/AppProvider'
 
@@ -34,7 +33,6 @@ function getPetEmoji(petKey: string | null) {
 }
 
 export default function DashboardPage() {
-  const router = useRouter()
   const { user, visibleStreak, financialProfile } = useAppContext()
 
   const income = financialProfile?.monthlyIncome ?? 0
@@ -48,9 +46,14 @@ export default function DashboardPage() {
   const petEmoji = getPetEmoji(user.petKey)
 
   async function handleSignOut() {
+  try {
     await supabase.auth.signOut()
-    router.push('/auth')
+  } catch (error) {
+    console.error('Sign out error:', error)
   }
+
+  window.location.href = '/auth'
+}
 
   return (
     <div
@@ -78,7 +81,7 @@ export default function DashboardPage() {
             gap: 16,
           }}
         >
-          <div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <p
               style={{
                 margin: 0,
@@ -89,59 +92,67 @@ export default function DashboardPage() {
               Hola
             </p>
 
-            <h1
-              style={{
-                margin: '6px 0 0 0',
-                fontSize: 30,
-                fontWeight: 800,
-                lineHeight: 1.1,
-              }}
-            >
-              {user.name || 'Usuario'}
-            </h1>
-          </div>
-
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <div
               style={{
-                background: 'rgba(255,255,255,0.05)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: 18,
-                padding: '12px 14px',
-                minWidth: 92,
-                textAlign: 'center',
-                boxShadow: '0 10px 30px rgba(0,0,0,0.22)',
-                backdropFilter: 'blur(12px)',
+                marginTop: 6,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                flexWrap: 'wrap',
               }}
             >
-              <div style={{ fontSize: 12, color: '#9CA3AF' }}>Racha</div>
-              <div
+              <h1
                 style={{
-                  marginTop: 4,
-                  fontSize: 22,
+                  margin: 0,
+                  fontSize: 30,
                   fontWeight: 800,
-                  color: '#22FF88',
+                  lineHeight: 1.1,
                 }}
               >
-                {visibleStreak}
-              </div>
-            </div>
+                {user.name || 'Usuario'}
+              </h1>
 
-            <button
-              onClick={handleSignOut}
+              <button
+                onClick={handleSignOut}
+                style={{
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  background: 'rgba(255,255,255,0.04)',
+                  color: '#9CA3AF',
+                  borderRadius: 999,
+                  padding: '6px 10px',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Salir
+              </button>
+            </div>
+          </div>
+
+          <div
+            style={{
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 18,
+              padding: '12px 14px',
+              minWidth: 92,
+              textAlign: 'center',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.22)',
+              backdropFilter: 'blur(12px)',
+            }}
+          >
+            <div style={{ fontSize: 12, color: '#9CA3AF' }}>Racha</div>
+            <div
               style={{
-                padding: '12px 14px',
-                borderRadius: 16,
-                border: '1px solid rgba(255,255,255,0.08)',
-                background: 'rgba(255,255,255,0.05)',
-                color: '#F5F7FB',
-                fontWeight: 700,
-                cursor: 'pointer',
-                boxShadow: '0 10px 30px rgba(0,0,0,0.22)',
+                marginTop: 4,
+                fontSize: 22,
+                fontWeight: 800,
+                color: '#22FF88',
               }}
             >
-              Salir
-            </button>
+              {visibleStreak}
+            </div>
           </div>
         </div>
 

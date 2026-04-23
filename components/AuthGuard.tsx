@@ -1,6 +1,6 @@
 'use client'
 
-import { useRouter, usePathname } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useSession } from '../lib/useSession'
 import { supabase } from '../lib/supabase'
@@ -11,19 +11,29 @@ export default function AuthGuard({
   children: React.ReactNode
 }) {
   const { session, loading } = useSession()
-  const router = useRouter()
   const pathname = usePathname()
   const [checkingProfile, setCheckingProfile] = useState(true)
 
   useEffect(() => {
+    let cancelled = false
+
     async function checkAccess() {
-      if (loading) return
+      // En auth nunca bloqueamos.
+      if (pathname === '/auth') {
+        if (!cancelled) {
+          setCheckingProfile(false)
+        }
+        return
+      }
+
+      if (loading) {
+        return
+      }
 
       if (!session) {
-        setCheckingProfile(false)
-
-        if (pathname !== '/auth') {
-          router.push('/auth')
+        if (!cancelled) {
+          setCheckingProfile(false)
+          window.location.replace('/auth')
         }
         return
       }
@@ -34,6 +44,8 @@ export default function AuthGuard({
         .eq('id', session.user.id)
         .maybeSingle()
 
+      if (cancelled) return
+
       if (error) {
         console.error('Error checking onboarding:', error)
         setCheckingProfile(false)
@@ -42,14 +54,14 @@ export default function AuthGuard({
 
       const hasCompletedOnboarding = data?.has_completed_onboarding ?? false
 
-      if (!hasCompletedOnboarding && pathname !== '/onboarding' && pathname !== '/auth') {
-        router.push('/onboarding')
+      if (!hasCompletedOnboarding && pathname !== '/onboarding') {
+        window.location.replace('/onboarding')
         setCheckingProfile(false)
         return
       }
 
       if (hasCompletedOnboarding && pathname === '/onboarding') {
-        router.push('/dashboard')
+        window.location.replace('/dashboard')
         setCheckingProfile(false)
         return
       }
@@ -58,14 +70,46 @@ export default function AuthGuard({
     }
 
     checkAccess()
-  }, [loading, session, pathname, router])
 
-  if (loading || checkingProfile) {
-    return <div style={{ padding: 20 }}>Cargando sesión...</div>
+    return () => {
+      cancelled = true
+    }
+  }, [loading, session, pathname])
+
+  if (pathname === '/auth') {
+    return <>{children}</>
   }
 
-  if (!session && pathname !== '/auth') {
-    return <div style={{ padding: 20 }}>Redirigiendo...</div>
+  if (loading || checkingProfile) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'grid',
+          placeItems: 'center',
+          background: '#0B0B12',
+          color: '#F5F7FB',
+        }}
+      >
+        Cargando...
+      </div>
+    )
+  }
+
+  if (!session) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'grid',
+          placeItems: 'center',
+          background: '#0B0B12',
+          color: '#F5F7FB',
+        }}
+      >
+        Redirigiendo...
+      </div>
+    )
   }
 
   return <>{children}</>
